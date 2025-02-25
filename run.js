@@ -65,16 +65,20 @@ function getDicomFilesRecursively(directory) {
     let dicomFiles = []
     if (!fs.existsSync(directory)) return dicomFiles
 
-    const items = fs.readdirSync(directory)
-    items.forEach(item => {
-        const fullPath = path.join(directory, item)
-        if (fs.statSync(fullPath).isDirectory()) {
-            dicomFiles = dicomFiles.concat(getDicomFilesRecursively(fullPath))
-        } else if (fullPath.toLowerCase().endsWith('.dcm')) {
-            dicomFiles.push(fullPath)
-        }
-    })
-
+    try {
+        const items = fs.readdirSync(directory)
+        items.forEach(item => {
+            const fullPath = path.join(directory, item)
+            if (fs.statSync(fullPath).isDirectory()) {
+                dicomFiles = dicomFiles.concat(getDicomFilesRecursively(fullPath))
+            } else if (fullPath.toLowerCase().endsWith('.dcm')) {
+                dicomFiles.push(fullPath)
+            }
+        })
+    } catch (error) {
+        console.error('unable to read folder at', directory, error.message)
+    }
+    
     return dicomFiles
 }
 
