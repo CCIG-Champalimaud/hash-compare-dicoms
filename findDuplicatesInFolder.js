@@ -1,6 +1,6 @@
 /**
  * @fileoverview Finds duplicate DICOM files in a folder by hashing pixel data.
- * Usage: node findDuplicatesInFolder.js <folder> [-f <outputfile>]
+ * Usage: node findDuplicatesInFolder.js <folder> [-f <outputfile>] [-c]
  */
 
 const fs = require('fs')
@@ -12,27 +12,30 @@ const cliProgress = require('cli-progress')
 // Parse CLI arguments for folder and flags
 let outputFile = null
 let folder = null
+let communicate = false
 
 for (let i = 2; i < process.argv.length; i++) {
     if (process.argv[i] === '-f' && process.argv[i + 1]) {
         outputFile = process.argv[i + 1]
         i++
+    } else if (process.argv[i] === '-c') {
+        communicate = true
     } else if (!folder && !process.argv[i].startsWith('-')) {
         folder = path.resolve(process.argv[i])
     }
 }
 
 if (!folder) {
-    console.error('Usage: node findDuplicatesInFolder.js <folder> [-f <outputfile>]')
+    console.error('Usage: node findDuplicatesInFolder.js <folder> [-f <outputfile>] [-c]')
     process.exit(1)
 }
 
-const progressBar = new cliProgress.SingleBar({
+const progressBar = !communicate ? new cliProgress.SingleBar({
     format: 'Processing [{bar}] {percentage}% | {value}/{total} files',
     barCompleteChar: '█',
     barIncompleteChar: '░',
     hideCursor: true
-})
+}) : null
 
 function hashPixelData(pixelData) {
     return crypto.createHash('sha256').update(pixelData).digest('hex')
@@ -105,17 +108,20 @@ async function findDuplicates(folder) {
     const files = await getDicomFilesRecursively(folder)
     const hashes = {}
     const concurrency = 8 // Set concurrency limit
-    progressBar.start(files.length, 0)
+    if (!communicate) progressBar.start(files.length, 0)
 
-    // Use asyncPool instead of p-limit
     let processed = 0
     const results = await asyncPool(concurrency, files, async (file) => {
         const hash = processDicomFile(file)
         processed++
-        progressBar.update(processed)
+        if (communicate) {
+            process.stdout.write(JSON.stringify({ type: "progress", current: processed, total: files.length }) + "\n")
+        } else {
+            progressBar.update(processed)
+        }
         return { file, hash }
     })
-    progressBar.stop()
+    if (!communicate) progressBar.stop()
 
     results.forEach(({ file, hash }) => {
         if (hash) {
@@ -124,51 +130,61 @@ async function findDuplicates(folder) {
         }
     })
 
-    // Collect only hashes with more than one file (duplicates)
     const duplicates = Object.entries(hashes)
         .filter(([_, fileList]) => fileList.length > 1)
 
     if (duplicates.length === 0) {
-        console.log('No duplicates found.')
+        if (!communicate) {
+            console.log('No duplicates found.')
+        } else {
+            process.stdout.write(JSON.stringify({ type: "summary", totalDuplicates: 0, timeSeconds: ((Date.now() - startTime) / 1000) }) + "\n")
+        }
         return
     }
 
-    if(!outputFile){
-        console.log('\nDuplicate DICOM file groups (by pixel data hash):')
-        console.log('---------------------------------------------------')
-    }
     let totalDuplicates = 0
     const output = []
     duplicates.forEach(([hash, fileList], idx) => {
         const group = []
-        
-        if(!outputFile) console.log(`duplicate ${idx + 1}:`)
-        
+        if (!outputFile && !communicate) console.log(`duplicate ${idx + 1}:`)
         fileList.forEach(file => {
-            if(!outputFile) console.log(`- ${file}`)
+            if (!outputFile && !communicate) console.log(`- ${file}`)
             group.push(file)
         })
         output.push(group)
         totalDuplicates += fileList.length - 1
-        if(!outputFile) console.log('')
+        if (!outputFile && !communicate) console.log('')
+        if (communicate) {
+            process.stdout.write(JSON.stringify({ type: "duplicate", group }) + "\n")
+        }
     })
 
-    if(!outputFile) console.log('---------------------------------------------------')
-    console.log(`Total duplicate files (excluding originals): ${totalDuplicates}`)
-    const endTime = Date.now()
-    console.log(`Time taken: ${(endTime - startTime) / 1000} seconds`)
+    if (!outputFile && !communicate) console.log('---------------------------------------------------')
+    if (!communicate) {
+        console.log(`Total duplicate files (excluding originals): ${totalDuplicates}`)
+        const endTime = Date.now()
+        console.log(`Time taken: ${(endTime - startTime) / 1000} seconds`)
+    }
 
-    // Save to file if requested
+    if (communicate) {
+        const endTime = Date.now()
+        process.stdout.write(JSON.stringify({
+            type: "summary",
+            totalDuplicates,
+            timeSeconds: (endTime - startTime) / 1000
+        }) + "\n")
+    }
+
     if (outputFile) {
         try {
             fs.writeFileSync(outputFile, JSON.stringify(output, null, 2), 'utf8')
-            console.log(`Duplicate groups saved to ${outputFile}`)
+            if (!communicate) console.log(`Duplicate groups saved to ${outputFile}`)
         } catch (err) {
             console.error(`Failed to write duplicates to file: ${err.message}`)
         }
     }
 }
 
-console.log(`Starting duplicate DICOM file search in folder: ${folder}`)
+if (!communicate) console.log(`Starting duplicate DICOM file search in folder: ${folder}`)
 const startTime = Date.now()
 findDuplicates(folder).catch(error => console.error('Error:', error))

@@ -93,7 +93,27 @@ To run the script directly with Node.js:
 ```sh
 node findDuplicatesInFolder.js /path/to/folder
 ```
+#### Optional Flags
 
+You can use the following optional flags with `findDuplicatesInFolder.js`:
+
+- `-f <filename>`  
+    Save the list of duplicates as a JSON array to the specified file.
+
+- `-c`  
+    Enable communication-friendly output for integration with other apps. The script will output one JSON object per line:
+    - Progress updates:  
+        `{ "type": "progress", "current": <number>, "total": <number> }`
+    - Duplicate group found:  
+        `{ "type": "duplicate", "group": [<file1>, <file2>, ...] }`
+    - Final summary:  
+        `{ "type": "summary", "totalDuplicates": <number>, "timeSeconds": <number> }`
+
+These flags can be combined as needed. Example:
+
+```sh
+node findDuplicatesInFolder.js /path/to/folder -f results.json -c
+```
 Alternatively, you can create standalone executables (no Node.js required) for Windows, Linux, and macOS using the `pkg` library:
 
 1. Install `pkg` globally:
