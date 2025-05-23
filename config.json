@@ -1,0 +1,11 @@
+{
+    "orthanc": {
+        "url": "http://localhost:8042",
+        "username": "admin",
+        "password": "orthanc"
+    },
+    "database": {
+        "type": "mongodb",
+        "connectionString": "mongodb://cliniti_user_db:cliniti_user_db@localhost:27017/cliniti"
+    }
+}

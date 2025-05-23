@@ -24,17 +24,39 @@ Make sure you have **Node.js** installed, then run:
 npm install
 ```
 
-### 2️⃣ Run the script
-Navigate to the project folder and run:
+### 2️⃣ setup config.json
+    - **run.js** does not need configuration since it only uses folders for comparison and these are args in command line. 
 
+    - **buildHashDatabase.js** uses the config.json to connect to orthanc and a database. This can be set following these guidelines:
+
+    ```json
+    {
+        "orthanc": {
+            "url": "http://localhost:8042",
+            "username": "admin", //leave empty if no auth is enforced
+            "password": "orthanc" //leave empty if no auth is enforced
+        },
+        "database": {
+            //if postgres is used
+            "type": "postgres",
+            "connectionString": "postgres://user:password@localhost:5432/database_name",
+            //if mongodb is used
+            "type": "mongodb",
+            "connectionString": "mongodb://user:password@localhost:27017/database_name",
+        }
+    }
+    ```
+
+
+## Running the scripts
+Navigate to the project folder and run in command line:
+
+### 1️⃣ run.js
 ```sh
 node run.js /path/to/folder1 /path/to/folder2
 ```
-
-
 ---
-
-## 📊 Example Output
+📊 Example Output
 
 When you run the script, it will scan the folders, compare all DICOM files (with or without .dcm extension), and produce output like this:
 
@@ -49,8 +71,21 @@ When you run the script, it will scan the folders, compare all DICOM files (with
     ❌ No matches found
 ---------------------------------------------------
 ```
-
 ---
+
+
+### 2️⃣ buildHashDatabase.js
+use -t flag to test first if the script works. It will output information about the connections to orthanc and database and a sample of the data that it will gather and would be saved into the database
+
+```sh
+node buildHashDatabase.js -t
+```
+
+When you are confident that the script is working remove the flag to save all images in database
+
+```sh
+node buildHashDatabase.js
+```
 
 ## 🛠️ Notes
 - The script identifies DICOM files by checking their headers, not just their file extensions.
