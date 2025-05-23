@@ -87,6 +87,38 @@ When you are confident that the script is working remove the flag to save all im
 node buildHashDatabase.js
 ```
 
+### 3️⃣ findDuplicatesInFolder.js
+To run the script directly with Node.js:
+
+```sh
+node findDuplicatesInFolder.js /path/to/folder
+```
+
+Alternatively, you can create standalone executables (no Node.js required) for Windows, Linux, and macOS using the `pkg` library:
+
+1. Install `pkg` globally:
+    ```sh
+    npm install -g pkg
+    ```
+
+2. Build executables for all platforms:
+    ```sh
+    pkg findDuplicatesInFolder.js --targets node18-macos-x64,node18-linux-x64,node18-win-x64
+    ```
+
+3. (Optional) Make the Linux and macOS binaries executable:
+    ```sh
+    chmod +x ./findDuplicatesInFolder-linux
+    chmod +x ./findDuplicatesInFolder-macos
+    ```
+
+4. Run the executable (example for Linux):
+    ```sh
+    ./findDuplicatesInFolder-linux /path/to/folder
+    ```
+
+Replace `/path/to/folder` with the directory you want to scan for duplicate DICOM files.
+
 ## 🛠️ Notes
 - The script identifies DICOM files by checking their headers, not just their file extensions.
 - It uses the `dicom-parser` library to extract pixel data and patient information.
