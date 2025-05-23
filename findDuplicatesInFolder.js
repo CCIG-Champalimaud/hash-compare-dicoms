@@ -87,23 +87,30 @@ async function findDuplicates(folder) {
     }
     progressBar.stop()
 
-    let foundDuplicates = false
-    console.log('\nDuplicate DICOM files (by pixel data hash):')
-    console.log('---------------------------------------------------')
-    for (const [hash, fileList] of Object.entries(hashes)) {
-        if (fileList.length > 1) {
-            foundDuplicates = true
-            console.log(`Hash: ${hash}`)
-            console.log(`  Original: ${fileList[0]}`)
-            for (let i = 1; i < fileList.length; i++) {
-                console.log(`  Duplicate: ${fileList[i]}`)
-            }
-            console.log('---------------------------------------------------')
-        }
-    }
-    if (!foundDuplicates) {
+    // Collect only hashes with more than one file (duplicates)
+    const duplicates = Object.entries(hashes)
+        .filter(([_, fileList]) => fileList.length > 1)
+
+    if (duplicates.length === 0) {
         console.log('No duplicates found.')
+        return
     }
+
+    console.log('\nDuplicate DICOM file groups (by pixel data hash):')
+    console.log('---------------------------------------------------')
+    let totalDuplicates = 0
+    duplicates.forEach(([hash, fileList], idx) => {
+        console.log(`duplicate ${idx + 1}:`)
+        fileList.forEach(file => {
+            console.log(`- ${file}`)
+        })
+        // Count duplicates (all except the first/original)
+        totalDuplicates += fileList.length - 1
+        console.log('')
+    })
+
+    console.log('---------------------------------------------------')
+    console.log(`Total duplicate files (excluding originals): ${totalDuplicates}`)
 }
 
 findDuplicates(folder).catch(error => console.error('Error:', error))
