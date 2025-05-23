@@ -73,19 +73,46 @@ async function getDicomFilesRecursively(directory) {
     return dicomFiles
 }
 
+// Add this helper function for concurrency limiting
+async function asyncPool(poolLimit, array, iteratorFn) {
+    const ret = []
+    const executing = []
+    for (const item of array) {
+        const p = Promise.resolve().then(() => iteratorFn(item))
+        ret.push(p)
+        if (poolLimit <= array.length) {
+            const e = p.then(() => executing.splice(executing.indexOf(e), 1))
+            executing.push(e)
+            if (executing.length >= poolLimit) {
+                await Promise.race(executing)
+            }
+        }
+    }
+    return Promise.all(ret)
+}
+
 async function findDuplicates(folder) {
     const files = await getDicomFilesRecursively(folder)
     const hashes = {}
+    const concurrency = 8 // Set concurrency limit
     progressBar.start(files.length, 0)
-    for (const [index, file] of files.entries()) {
+
+    // Use asyncPool instead of p-limit
+    let processed = 0
+    const results = await asyncPool(concurrency, files, async (file) => {
         const hash = processDicomFile(file)
+        processed++
+        progressBar.update(processed)
+        return { file, hash }
+    })
+    progressBar.stop()
+
+    results.forEach(({ file, hash }) => {
         if (hash) {
             if (!hashes[hash]) hashes[hash] = []
             hashes[hash].push(file)
         }
-        progressBar.update(index + 1)
-    }
-    progressBar.stop()
+    })
 
     // Collect only hashes with more than one file (duplicates)
     const duplicates = Object.entries(hashes)
@@ -111,6 +138,10 @@ async function findDuplicates(folder) {
 
     console.log('---------------------------------------------------')
     console.log(`Total duplicate files (excluding originals): ${totalDuplicates}`)
+    const endTime = Date.now()
+    console.log(`Time taken: ${(endTime - startTime) / 1000} seconds`)
 }
 
+console.log(`Starting duplicate DICOM file search in folder: ${folder}`)
+const startTime = Date.now()
 findDuplicates(folder).catch(error => console.error('Error:', error))
