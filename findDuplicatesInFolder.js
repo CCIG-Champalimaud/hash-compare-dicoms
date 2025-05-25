@@ -119,6 +119,8 @@ async function findDuplicates(folder) {
         processed++
         if (communicate) {
             process.stdout.write(JSON.stringify({ type: "progress", current: processed, total: files.length }) + "\n")
+            process.stdout.write('', () => {}); // Force flush
+
         } else if (communicateHash) {
             if (hash) {
                 process.stdout.write(JSON.stringify({
@@ -129,9 +131,12 @@ async function findDuplicates(folder) {
                     progressCurrent: processed,
                     progressTotal: files.length
                 }) + "\n")
+                process.stdout.write('', () => {}); // Force flush
             }
+
         } else {
             progressBar.update(processed)
+
         }
         return { file, hash }
     })
@@ -176,6 +181,7 @@ async function findDuplicates(folder) {
         if (!outputFile && !communicate) console.log('')
         if (communicate) {
             process.stdout.write(JSON.stringify({ type: "duplicate", group, hash }) + "\n")
+            process.stdout.write('', () => {}); // Force flush
         }
     })
 
