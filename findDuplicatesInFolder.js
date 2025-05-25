@@ -145,17 +145,20 @@ async function findDuplicates(folder) {
     let totalDuplicates = 0
     const output = []
     duplicates.forEach(([hash, fileList], idx) => {
-        const group = []
+        // Build group as array of objects: { fileName, fullPath }
+        const group = fileList.map(file => ({
+            fileName: path.basename(file),
+            fullPath: file
+        }))
         if (!outputFile && !communicate) console.log(`duplicate ${idx + 1}:`)
         fileList.forEach(file => {
             if (!outputFile && !communicate) console.log(`- ${file}`)
-            group.push(file)
         })
-        output.push(group)
+        output.push(fileList)
         totalDuplicates += fileList.length - 1
         if (!outputFile && !communicate) console.log('')
         if (communicate) {
-            process.stdout.write(JSON.stringify({ type: "duplicate", group }) + "\n")
+            process.stdout.write(JSON.stringify({ type: "duplicate", group, hash }) + "\n")
         }
     })
 
