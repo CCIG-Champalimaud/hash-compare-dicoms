@@ -88,6 +88,17 @@ node buildHashDatabase.js
 ```
 
 ### 3️⃣ findDuplicatesInFolder.js
+This module extracts relevant content from DICOM files depending on their SOP Class UID and computes the hash for matching with other images and find duplicates. It supports both image and non-image modalities.
+
+| SOP Class / Type          | UID Prefix / Value              | Hashed Element                                                               | Notes                         |
+| ------------------------- | ------------------------------- | ---------------------------------------------------------------------------- | ----------------------------- |
+| Standard Images           | General (CT, MR, CR, etc.)      | `PixelData (7FE0,0010)`                                                      | Image data                    |
+| Encapsulated PDF          | `1.2.840.10008.5.1.4.1.1.104.1` | `EncapsulatedDocument (0042,0011)`                                           | PDF binary                    |
+| Structured Report (SR)    | `1.2.840.10008.5.1.4.1.1.88.*`  | `ContentSequence (0040,A730)`                                                | Hierarchical coded text       |
+| RT Structure Set          | `1.2.840.10008.5.1.4.1.1.481.3` | `StructureSetROISequence`, `ROIContourSequence`, `RTROIObservationsSequence` | Geometric + semantic ROI data |
+| Waveform (ECG, EEG, etc.) | `1.2.840.10008.5.1.4.1.1.9.1.*` | `WaveformSequence (5400,0100)`                                               | Raw waveform data             |
+
+
 To run the script directly with Node.js:
 
 ```sh

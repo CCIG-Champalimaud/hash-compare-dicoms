@@ -40,21 +40,125 @@ const progressBar = (!communicate && !communicateHash) ? new cliProgress.SingleB
     hideCursor: true
 }) : null
 
-function hashPixelData(pixelData) {
-    return crypto.createHash('sha256').update(pixelData).digest('hex')
+function hashBuffer(buffer) {
+    return crypto.createHash('sha256').update(buffer).digest('hex')
 }
 
 function processDicomFile(filePath) {
     try {
         const dicomData = fs.readFileSync(filePath)
         const dataSet = dicomParser.parseDicom(dicomData)
-        const pixelDataElement = dataSet.elements.x7fe00010
-        if (!pixelDataElement) return null
-        const pixelData = new Uint8Array(dicomData.buffer, pixelDataElement.dataOffset, pixelDataElement.length)
-        return hashPixelData(pixelData)
+        return extractRelevantData(dataSet)
     } catch {
         return null
     }
+}
+
+
+function extractRelevantData(dataSet) {
+    const sopClassUID = dataSet.string('x00080016') || ''
+    const modality = dataSet.string('x00080060') || ''
+    
+    // Handle image-based modalities
+    if (!isSpecialSOPClass(sopClassUID)) {
+        const pixelDataElement = dataSet.elements.x7fe00010
+        if (!pixelDataElement || pixelDataElement.length === 0) return null
+
+        const pixelData = new Uint8Array(
+            dataSet.byteArray.buffer,
+            pixelDataElement.dataOffset,
+            pixelDataElement.length
+        )
+        return hashBuffer(pixelData)
+    }
+
+    // Handle special cases
+    return handleSpecialSOPClass(dataSet, sopClassUID)
+}
+
+
+function isSpecialSOPClass(sopClassUID) {
+    return [
+        '1.2.840.10008.5.1.4.1.1.104.1', // PDF
+        '1.2.840.10008.5.1.4.1.1.88.',   // SR (prefix match)
+        '1.2.840.10008.5.1.4.1.1.481.3', // RT Structure Set
+        '1.2.840.10008.5.1.4.1.1.9.1.',  // Waveform
+        //'1.2.840.10008.5.1.4.1.1.66.4'   // Segmentation (has pixelData so it's normal)
+    ].some(prefix => sopClassUID.startsWith(prefix))
+}
+
+
+function handleSpecialSOPClass(dataSet, sopClassUID) {
+    //encapsulated pdf
+    if (sopClassUID === '1.2.840.10008.5.1.4.1.1.104.1') {
+        const docElement = dataSet.elements.x00420011
+        if (!docElement || docElement.length === 0) return null
+        const buffer = new Uint8Array(
+            dataSet.byteArray.buffer,
+            docElement.dataOffset,
+            docElement.length
+        )
+
+        return hashBuffer(buffer)
+    }
+
+    //SR 
+    if(sopClassUID.startsWith('1.2.840.10008.5.1.4.1.1.88.') ){
+        const contentElement = dataSet.elements.x0040a730
+        if (!contentElement || contentElement.length === 0) return null
+    
+        const buffer = new Uint8Array(
+            dataSet.byteArray.buffer,
+            contentElement.dataOffset,
+            contentElement.length
+        )
+       
+        return hashBuffer(buffer)
+    }
+    
+    // RT Structure 
+    if (sopClassUID === '1.2.840.10008.5.1.4.1.1.481.3') {
+        const targets = [
+            'x30060020', // StructureSetROISequence
+            'x30060039', // ROIContourSequence
+            'x30060080'  // RTROIObservationsSequence
+        ]
+    
+        const buffers = []
+    
+        for (const tag of targets) {
+            const element = dataSet.elements[tag]
+            if (element && element.length > 0) {
+                const buffer = new Uint8Array(
+                    dataSet.byteArray.buffer,
+                    element.dataOffset,
+                    element.length
+                )
+                buffers.push(...buffer)
+            }
+        }
+    
+        if (buffers.length === 0) return null
+    
+        return hashBuffer(new Uint8Array(buffers))
+    }
+
+    //Waveform
+    if(sopClassUID.startsWith('1.2.840.10008.5.1.4.1.1.9.1.') ){
+        const waveformElement = dataSet.elements.x54000100
+        if (!waveformElement || waveformElement.length === 0) return null
+
+        const buffer = new Uint8Array(
+            dataSet.byteArray.buffer,
+            waveformElement.dataOffset,
+            waveformElement.length
+        )
+
+        return hashBuffer(buffer)
+    }
+
+    // Add other handlers like SR, Waveforms, etc. as needed
+    return null
 }
 
 async function isDicomFile(filePath) {
