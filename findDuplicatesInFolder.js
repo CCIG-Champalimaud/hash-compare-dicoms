@@ -44,9 +44,9 @@ function hashBuffer(buffer) {
     return crypto.createHash('sha256').update(buffer).digest('hex')
 }
 
-function processDicomFile(filePath) {
+async function processDicomFile(filePath) {
     try {
-        const dicomData = fs.readFileSync(filePath)
+        const dicomData = await fs.promises.readFile(filePath)
         const dataSet = dicomParser.parseDicom(dicomData)
         return extractRelevantData(dataSet)
     } catch {
@@ -178,7 +178,7 @@ async function getDicomFilesRecursively(directory) {
     try {
         await fs.promises.access(directory)
         const items = await fs.promises.readdir(directory)
-        await Promise.all(items.map(async item => {
+        for (const item of items) {
             const fullPath = path.join(directory, item)
             const stat = await fs.promises.stat(fullPath)
             if (stat.isDirectory()) {
@@ -188,43 +188,57 @@ async function getDicomFilesRecursively(directory) {
                 const isDicom = await isDicomFile(fullPath)
                 if (isDicom) dicomFiles.push(fullPath)
             }
-        }))
+        }
     } catch {}
     return dicomFiles
 }
 
 // Add this helper function for concurrency limiting
 async function asyncPool(poolLimit, array, iteratorFn) {
-    const ret = []
     const executing = []
+
     for (const item of array) {
         const p = Promise.resolve().then(() => iteratorFn(item))
-        ret.push(p)
-        if (poolLimit <= array.length) {
-            const e = p.then(() => executing.splice(executing.indexOf(e), 1))
-            executing.push(e)
-            if (executing.length >= poolLimit) {
-                await Promise.race(executing)
-            }
+
+        const e = p.then(() => {
+            executing.splice(executing.indexOf(e), 1)
+        })
+        executing.push(e)
+
+        if (executing.length >= poolLimit) {
+            await Promise.race(executing)
         }
     }
-    return Promise.all(ret)
+
+    await Promise.all(executing)
 }
 
 async function findDuplicates(folder) {
     const files = await getDicomFilesRecursively(folder)
-    const hashes = {}
-    const concurrency = 8 // Set concurrency limit
+    const hashes = new Map()
+    const concurrency = 8
+
     if (!communicate && !communicateHash) progressBar.start(files.length, 0)
 
     let processed = 0
-    const results = await asyncPool(concurrency, files, async (file) => {
-        const hash = processDicomFile(file)
-        processed++
-        if (communicate) {
-            process.stdout.write(JSON.stringify({ type: "progress", current: processed, total: files.length }) + "\n")
-            process.stdout.write('', () => {}); // Force flush
+    let totalDuplicates = 0
+    const output = []
 
+    await asyncPool(concurrency, files, async (file) => {
+        const hash = await processDicomFile(file)
+        processed++
+
+        if (communicate) {
+            if (hash) {
+                process.stdout.write(JSON.stringify({
+                    type: "hash",
+                    fileName: path.basename(file),
+                    fullPath: file,
+                    hash,
+                    progressCurrent: processed,
+                    progressTotal: files.length
+                }) + "\n")
+            }
         } else if (communicateHash) {
             if (hash) {
                 process.stdout.write(JSON.stringify({
@@ -235,29 +249,24 @@ async function findDuplicates(folder) {
                     progressCurrent: processed,
                     progressTotal: files.length
                 }) + "\n")
-                process.stdout.write('', () => {}); // Force flush
             }
-
         } else {
             progressBar.update(processed)
-
         }
-        return { file, hash }
+
+        // Guardar hashes (exceto se comunicar só hashes)
+        if (!communicateHash && hash) {
+            if (!hashes.has(hash)) hashes.set(hash, [])
+            hashes.get(hash).push(file)
+        }
     })
+
     if (!communicate && !communicateHash) progressBar.stop()
 
-    // If -ch, we do not need to process duplicates or output anything else
+    // Se só comunicar hashes, termina aqui
     if (communicateHash) return
 
-    results.forEach(({ file, hash }) => {
-        if (hash) {
-            if (!hashes[hash]) hashes[hash] = []
-            hashes[hash].push(file)
-        }
-    })
-
-    const duplicates = Object.entries(hashes)
-        .filter(([_, fileList]) => fileList.length > 1)
+    const duplicates = [...hashes.entries()].filter(([_, files]) => files.length > 1)
 
     if (duplicates.length === 0) {
         if (!communicate) {
@@ -268,40 +277,35 @@ async function findDuplicates(folder) {
         return
     }
 
-    let totalDuplicates = 0
-    const output = []
     duplicates.forEach(([hash, fileList], idx) => {
-        // Build group as array of objects: { fileName, fullPath }
         const group = fileList.map(file => ({
             fileName: path.basename(file),
             fullPath: file
         }))
-        if (!outputFile && !communicate) console.log(`duplicate ${idx + 1}:`)
-        fileList.forEach(file => {
-            if (!outputFile && !communicate) console.log(`- ${file}`)
-        })
+        if (!outputFile && !communicate) {
+            console.log(`duplicate ${idx + 1}:`)
+            fileList.forEach(file => console.log(`- ${file}`))
+            console.log('')
+        }
         output.push(fileList)
         totalDuplicates += fileList.length - 1
-        if (!outputFile && !communicate) console.log('')
+
         if (communicate) {
             process.stdout.write(JSON.stringify({ type: "duplicate", group, hash }) + "\n")
-            process.stdout.write('', () => {}); // Force flush
         }
     })
 
-    if (!outputFile && !communicate) console.log('---------------------------------------------------')
-    if (!communicate) {
+    if (!outputFile && !communicate) {
+        console.log('---------------------------------------------------')
         console.log(`Total duplicate files (excluding originals): ${totalDuplicates}`)
-        const endTime = Date.now()
-        console.log(`Time taken: ${(endTime - startTime) / 1000} seconds`)
+        console.log(`Time taken: ${(Date.now() - startTime) / 1000} seconds`)
     }
 
     if (communicate) {
-        const endTime = Date.now()
         process.stdout.write(JSON.stringify({
             type: "summary",
             totalDuplicates,
-            timeSeconds: (endTime - startTime) / 1000
+            timeSeconds: (Date.now() - startTime) / 1000
         }) + "\n")
     }
 
