@@ -96,12 +96,13 @@ const progressBar = (!communicate && !communicateHash) ? new cliProgress.SingleB
     // Remove nested folders to avoid processing subfolders multiple times
     folders = removeNestedFolders(folders)
 
+    const counter = { count: 0, dicoms: 0 }
     for(const folderPath of folders) {
         console.log(`Processing folder: ${folderPath}`)
-        await saveAllFilePaths(folderPath, deepMode, tempFilePath)
+        await saveAllFilePaths(folderPath, deepMode, tempFilePath, counter)
     }
 
-    let totalDicoms = 0
+    //let totalDicoms = 0
     const hashes = new Map()
 
     await processFilePaths(tempFilePath, async (filePath, index, total) => {
@@ -110,9 +111,9 @@ const progressBar = (!communicate && !communicateHash) ? new cliProgress.SingleB
         // if(!isDicom) return
 
         //some dicoms will not be hashable but totalDicoms should still be incremented
-        totalDicoms++
+        //totalDicoms++
         
-        const hash = await processDicomFile(filePath)
+        const hash = await processDicomFile(filePath, counter)
 
         if(!hash) {
             return
@@ -183,14 +184,16 @@ const progressBar = (!communicate && !communicateHash) ? new cliProgress.SingleB
     // sumary and output
     if (!outputFile && !communicate) {
         console.log('---------------------------------------------------')
-        console.log(`Total duplicate files (excluding originals): ${totalDuplicates}`)
+        console.log(`Files checked: ${counter.count}, dicoms: ${counter.dicoms}, duplicates: ${totalDuplicates}`)
         console.log(`Time taken: ${(Date.now() - startTime) / 1000} seconds`)
     }
 
     if (communicate) {
         process.stdout.write(JSON.stringify({
             type: "summary",
-            totalDuplicates,
+            totalFiles: counter.count,
+            totalDicoms: counter.dicoms,
+            totalDuplicates: totalDuplicates,
             timeSeconds: (Date.now() - startTime) / 1000
         }) + "\n")
     }
@@ -202,15 +205,19 @@ const progressBar = (!communicate && !communicateHash) ? new cliProgress.SingleB
         } catch (err) {
             console.error(`Failed to write duplicates to file: ${err.message}`)
         }
+        console.log(`Files checked: ${counter.count}, dicoms: ${counter.dicoms}, duplicates: ${totalDuplicates}`)
+        console.log(`Time taken: ${(Date.now() - startTime) / 1000} seconds`)
     }
   
-    console.log('total dicom files:', totalDicoms, 'elapsed time:', (Date.now() - startTime) / 1000 )
     cleanup()
 })()
 
 
 
 process.on('exit', code => {
+    if (code !== 0) {
+        console.error(`Process exited with code ${code}`)
+    }
   cleanup()
 })
 
@@ -225,11 +232,13 @@ process.on('SIGTERM', () => {
 })
 
 process.on('uncaughtException', err => {
+    console.error('Uncaught Exception:', err.message)
   cleanup()
   process.exit(1)
 })
 
 process.on('unhandledRejection', err => {
+    console.error('Unhandled Rejection:', err.message)
   cleanup()
   process.exit(1)
 })
