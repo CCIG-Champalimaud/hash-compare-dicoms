@@ -128,7 +128,12 @@ const numCPUs = os.cpus().length
 const CONCURRENCY = Math.max(2, numCPUs - 1) // leave 1 core free
 
 async function scanAndIndexFiles(folders) {
-    const bar = new cliProgress.SingleBar({}, cliProgress.Presets.rect)
+    const bar = new cliProgress.SingleBar({
+        format: 'Processing [{bar}] {percentage}% | {value}/{total} files',
+        barCompleteChar: '█',
+        barIncompleteChar: '░',
+        hideCursor: true
+    })
 
     let totalFiles = 0
     let dicomCount = 0
