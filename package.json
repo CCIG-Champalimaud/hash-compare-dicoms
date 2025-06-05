@@ -1,10 +1,11 @@
 {
   "name": "hash-compare-medical-images",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "download-lmdb-prebuilds": "download-lmdb-prebuilds"
   },
   "keywords": [],
   "author": "",
@@ -15,8 +16,14 @@
     "crypto": "^1.0.1",
     "dicom-parser": "^1.8.21",
     "fs-extra": "^11.3.0",
+    "lmdb": "^3.4.0",
     "mongodb": "^6.15.0",
     "path": "^0.12.7",
     "pg": "^8.14.1"
+  },
+  "pkg": {
+    "assets": [
+      "node_modules/lmdb/*.node"
+    ]
   }
 }
