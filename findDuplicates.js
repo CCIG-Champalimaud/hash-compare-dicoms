@@ -61,25 +61,25 @@ let startTime = Date.now()
 // START =======================================
 ;(async () => {
 
-    // Remove nested folders to avoid processing subfolders multiple times
-    folders = removeNestedFolders(folders)
+    try {
+        // Remove nested folders to avoid processing subfolders multiple times
+        folders = removeNestedFolders(folders)
 
-    console.log('processing folders:')
-    folders.forEach(f => console.log(' -', f))
+        console.log('processing folders:')
+        folders.forEach(f => console.log(' -', f))
 
-    await scanAndIndexFiles(folders)
+        await scanAndIndexFiles(folders)
 
+    } catch (error) {
+
+    }finally {
+        
+        db.close() 
+        console.log(`Time taken: ${(Date.now() - startTime) / 1000} seconds`)
+    }   
+   
     
-
-})().catch(err => {
-    console.error('Error:', err)
-
-}).finally(() => {
-    // close the database connection
-    db.close()
-    console.log(`Time taken: ${(Date.now() - startTime) / 1000} seconds`)
-})
-
+})()
 
 
 
@@ -132,8 +132,7 @@ async function scanAndIndexFiles(folders) {
 
     let totalFiles = 0
     let dicomCount = 0
-    const pool = []
-    
+
     for (const folder of folders) {
         for await (const filePath of walk(folder)) {
             totalFiles++
@@ -148,52 +147,39 @@ async function scanAndIndexFiles(folders) {
             
             bar.update(totalFiles)
 
-            // Add file processing to the pool
-            const p = (async () => {
-                try {
-                    const fileName = path.basename(filePath)
+            try {
+                const fileName = path.basename(filePath)
 
-                    if (!deepMode) {
-                        const ext = path.extname(fileName).toLowerCase()
-                        if (
-                            fileName.startsWith('.') ||
-                            (ext && ext !== '.dcm' && ext !== '.dicom')
-                        ) {
-                            return
-                        }
-                    }
-
-                    const dicomInfo = await processDicom(filePath)
-                    if (!dicomInfo) return
-
-                    dicomCount++
-
-                    const record = {
-                        fileName,
-                        ...dicomInfo
-                    }
-
-                    await db.put(filePath, record)
-
-                } catch (err) {
-                    errors.push({ filePath, message: err.message })
-                    if (errors.length < 5) {
-                        console.warn(`Erro ao processar ${filePath}: ${err.message}`)
+                if (!deepMode) {
+                    const ext = path.extname(fileName).toLowerCase()
+                    if (
+                        fileName.startsWith('.') ||
+                        (ext && ext !== '.dcm' && ext !== '.dicom')
+                    ) {
+                        continue
                     }
                 }
-            })()
-            pool.push(p)
 
-            // If pool is full, wait for one to finish
-            if (pool.length >= CONCURRENCY) {
-                await Promise.race(pool).catch(() => {})
-                pool.shift() // Remove the oldest promise to keep pool size bounded
+                const dicomInfo = await processDicom(filePath)
+                if (!dicomInfo) continue
+
+                dicomCount++
+
+                const record = {
+                    fileName,
+                    ...dicomInfo
+                }
+
+                await db.put(filePath, record)
+
+            } catch (err) {
+                errors.push({ filePath, message: err.message })
+                // if (errors.length < 5) {
+                //     console.warn(`Erro ao processar ${filePath}: ${err.message}`)
+                // }
             }
         }
     }
-
-    // Wait for all remaining tasks
-    await Promise.allSettled(pool)
 
     bar.setTotal(totalFiles)
     bar.stop()
@@ -207,8 +193,6 @@ async function scanAndIndexFiles(folders) {
     console.log(`Total de ficheiros verificados: ${totalFiles}`)
     console.log(`Total de DICOMs válidos: ${dicomCount}`)
     console.log(`Total de erros: ${errors.length}`)
-
-
 }
 
 
@@ -264,7 +248,7 @@ async function processDicom(filePath) {
         try {
             stats = await fsPromises.stat(filePath)
             if (stats.size > 1_000_000_000) return null
-        } catch {
+        } catch (err){
             return null // no stats or file too large
         }
 
@@ -277,7 +261,7 @@ async function processDicom(filePath) {
         const get = tag => {
             try {
                 return dataSet.string(tag) || null
-            } catch {
+            } catch (err){
                 return null
             }
         }
